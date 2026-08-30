@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { generateMessages } from "@/lib/anthropic";
+import { generateMessages } from "@/lib/openai";
 
 export async function POST(request: NextRequest) {
   const { affiliateLinkId } = (await request.json()) as { affiliateLinkId: string };

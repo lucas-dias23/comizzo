@@ -9,7 +9,7 @@ divulgar em grupos de WhatsApp.
 - Next.js (App Router) + TypeScript + Tailwind CSS v4
 - Supabase (Postgres + Auth)
 - Stripe (assinatura mensal/anual)
-- Anthropic (Claude) pra gerar as mensagens
+- OpenAI (GPT) pra gerar as mensagens
 - API do Mercado Livre (com fallback pra dados mock enquanto não há credenciais)
 - Deploy: Vercel (+ Vercel Cron pra atualizar o catálogo de produtos)
 
@@ -54,10 +54,11 @@ com dados de demonstração (`lib/meli/mock.ts`) — dá pra testar o fluxo comp
    pra `STRIPE_WEBHOOK_SECRET`.
 5. Em desenvolvimento local, use `stripe listen --forward-to localhost:3000/api/webhooks/stripe`.
 
-### 3. Anthropic
+### 3. OpenAI
 
-Gere uma API key em [console.anthropic.com](https://console.anthropic.com) e
-coloque em `ANTHROPIC_API_KEY`.
+Gere uma API key em [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+e coloque em `OPENAI_API_KEY`. O modelo usado é configurável via `OPENAI_MODEL`
+(padrão `gpt-4o-mini`) — ajuste pro modelo que preferir na sua conta.
 
 ### 4. Mercado Livre (opcional na v1)
 

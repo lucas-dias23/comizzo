@@ -1,8 +1,15 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import type { ProductSnapshot } from "@/types/database";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5";
+const MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+
+// Instanciado sob demanda (não no escopo do módulo) — o construtor da SDK
+// lança erro se OPENAI_API_KEY não estiver setada, e esse arquivo é
+// carregado durante o build do Next.js pra coletar metadados da rota, antes
+// das env vars de produção existirem.
+function getClient() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
 
 const SYSTEM_PROMPT = `Você escreve mensagens de venda pra grupos de WhatsApp em nome da Comizzo.
 Tom de marca: direto, sem enrolação, com uma pitada de malandragem boa — linguagem de quem
@@ -17,7 +24,7 @@ Regras:
 - Sempre termine a mensagem com o link de afiliado em uma linha própria.
 - Nunca invente informação sobre o produto que não foi passada (preço, nome).
 - Não prometa nada que soe golpe ("ganhe dinheiro fácil", "milagre"), mantenha credibilidade.
-- Retorne SOMENTE um array JSON de strings, sem markdown, sem texto antes ou depois.`;
+- Responda em JSON: um objeto com a chave "messages" contendo um array de strings.`;
 
 export async function generateMessages(
   product: ProductSnapshot,
@@ -30,27 +37,35 @@ Categoria: ${product.category_name ?? "não informado"}
 Link de afiliado (usar exatamente esse): ${affiliateUrl}
 
 Gere ${count} variações de mensagem de divulgação pra grupo de WhatsApp, cada uma usando uma
-estratégia/gatilho diferente. Responda só com o array JSON de ${count} strings.`;
+estratégia/gatilho diferente. Responda só com o JSON pedido, com exatamente ${count} mensagens.`;
 
-  const response = await anthropic.messages.create({
+  const response = await getClient().chat.completions.create({
     model: MODEL,
-    max_tokens: 1200,
     temperature: 1,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: userPrompt }],
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: userPrompt },
+    ],
   });
 
-  const textBlock = response.content.find((block) => block.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    throw new Error("Resposta da IA sem conteúdo de texto.");
+  const raw = response.choices[0]?.message?.content;
+  if (!raw) {
+    throw new Error("Resposta da IA sem conteúdo.");
   }
 
-  const jsonMatch = textBlock.text.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
     throw new Error("Não foi possível interpretar a resposta da IA.");
   }
 
-  const messages = JSON.parse(jsonMatch[0]);
+  const messages =
+    parsed && typeof parsed === "object" && "messages" in parsed
+      ? (parsed as { messages: unknown }).messages
+      : parsed;
+
   if (!Array.isArray(messages) || messages.some((m) => typeof m !== "string")) {
     throw new Error("Formato inesperado na resposta da IA.");
   }
