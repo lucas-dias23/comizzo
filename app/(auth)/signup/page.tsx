@@ -6,16 +6,35 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type { PlanId } from "@/lib/stripe";
+import type { PlanId } from "@/lib/abacatepay";
 
 const PLANS: { id: PlanId; label: string; hint: string }[] = [
   { id: "monthly", label: "Mensal", hint: "cobrança todo mês" },
   { id: "yearly", label: "Anual", hint: "2 meses grátis no ano" },
 ];
 
+function formatCpf(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  return digits
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+}
+
+function formatPhone(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 10) {
+    return digits.replace(/(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3");
+  }
+  return digits.replace(/(\d{2})(\d{5})(\d{0,4})/, "($1) $2-$3");
+}
+
 export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [cpf, setCpf] = useState("");
+  const [phone, setPhone] = useState("");
   const [plan, setPlan] = useState<PlanId>("monthly");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -45,7 +64,7 @@ export default function SignupPage() {
     const res = await fetch("/api/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plan }),
+      body: JSON.stringify({ plan, name, taxId: cpf, cellphone: phone }),
     });
     const body = await res.json();
 
@@ -84,6 +103,17 @@ export default function SignupPage() {
         </div>
 
         <div>
+          <Label htmlFor="name">Nome completo</Label>
+          <Input
+            id="name"
+            type="text"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Seu nome completo"
+          />
+        </div>
+        <div>
           <Label htmlFor="email">E-mail</Label>
           <Input
             id="email"
@@ -104,6 +134,30 @@ export default function SignupPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="mínimo 6 caracteres"
+          />
+        </div>
+        <div>
+          <Label htmlFor="cpf">CPF</Label>
+          <Input
+            id="cpf"
+            type="text"
+            inputMode="numeric"
+            required
+            value={cpf}
+            onChange={(e) => setCpf(formatCpf(e.target.value))}
+            placeholder="000.000.000-00"
+          />
+        </div>
+        <div>
+          <Label htmlFor="phone">Telefone (WhatsApp)</Label>
+          <Input
+            id="phone"
+            type="tel"
+            inputMode="numeric"
+            required
+            value={phone}
+            onChange={(e) => setPhone(formatPhone(e.target.value))}
+            placeholder="(11) 99999-9999"
           />
         </div>
 

@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { stripe, STRIPE_PRICES, type PlanId } from "@/lib/stripe";
+import { createSubscriptionCheckout, getProductId, type PlanId } from "@/lib/abacatepay";
 
 export async function POST(request: NextRequest) {
-  const { plan } = (await request.json()) as { plan: PlanId };
+  const { plan, name, taxId, cellphone } = (await request.json()) as {
+    plan: PlanId;
+    name: string;
+    taxId: string;
+    cellphone: string;
+  };
 
   if (plan !== "monthly" && plan !== "yearly") {
     return NextResponse.json({ error: "plano inválido" }, { status: 400 });
+  }
+  if (!name?.trim() || !taxId?.trim() || !cellphone?.trim()) {
+    return NextResponse.json({ error: "nome, CPF e telefone são obrigatórios" }, { status: 400 });
   }
 
   const supabase = await createClient();
@@ -18,25 +26,38 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "não autenticado" }, { status: 401 });
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("stripe_customer_id")
-    .eq("id", user.id)
-    .single();
+  let productId: string;
+  try {
+    productId = getProductId(plan);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "erro desconhecido";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 
   const origin = request.nextUrl.origin;
+  const rawPhone = cellphone.replace(/\D/g, "");
+  const formattedPhone = rawPhone.startsWith("55") ? `+${rawPhone}` : `+55${rawPhone}`;
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    customer: profile?.stripe_customer_id ?? undefined,
-    customer_email: profile?.stripe_customer_id ? undefined : user.email,
-    client_reference_id: user.id,
-    metadata: { user_id: user.id },
-    subscription_data: { metadata: { user_id: user.id } },
-    line_items: [{ price: STRIPE_PRICES[plan], quantity: 1 }],
-    success_url: `${origin}/dashboard?checkout=sucesso`,
-    cancel_url: `${origin}/conta?checkout=cancelado`,
-  });
+  let checkout;
+  try {
+    checkout = await createSubscriptionCheckout({
+      productId,
+      userId: user.id,
+      customer: {
+        name: name.trim(),
+        email: user.email!,
+        cellphone: formattedPhone,
+        taxId: taxId.replace(/\D/g, ""),
+      },
+      returnUrl: `${origin}/conta`,
+      completionUrl: `${origin}/dashboard?checkout=sucesso`,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "erro desconhecido";
+    return NextResponse.json({ error: `Falha ao criar checkout: ${message}` }, { status: 502 });
+  }
 
-  return NextResponse.json({ url: session.url });
+  // A assinatura real (subs_...) ainda não existe — será criada só após o
+  // pagamento PIX. O ID e plano definitivos chegam via webhook subscription.completed.
+  return NextResponse.json({ url: checkout.url });
 }

@@ -8,7 +8,7 @@ divulgar em grupos de WhatsApp.
 
 - Next.js (App Router) + TypeScript + Tailwind CSS v4
 - Supabase (Postgres + Auth)
-- Stripe (assinatura mensal/anual)
+- AbacatePay (assinatura mensal/anual via PIX)
 - OpenAI (GPT) pra gerar as mensagens
 - API do Mercado Livre (com fallback pra dados mock enquanto não há credenciais)
 - Deploy: Vercel (+ Vercel Cron pra atualizar o catálogo de produtos)
@@ -32,27 +32,37 @@ com dados de demonstração (`lib/meli/mock.ts`) — dá pra testar o fluxo comp
    `service_role key` pro `.env.local`.
 3. Em **Authentication > Providers > Email**, desative a confirmação por
    e-mail obrigatória (**Confirm email**) — o fluxo de cadastro leva direto
-   pro pagamento no Stripe, então o usuário precisa já ter sessão ativa
-   nesse momento.
-4. Rode o SQL de `supabase/migrations/0001_init.sql` no SQL Editor do
-   projeto (ou via `supabase db push` se usar a CLI).
+   pro pagamento, então o usuário precisa já ter sessão ativa nesse momento.
+4. Rode os SQLs na ordem no SQL Editor do projeto (ou via `supabase db push`):
+   - `supabase/migrations/0001_init.sql`
+   - `supabase/migrations/0002_abacatepay.sql`
 5. Pra virar admin (acessa `/admin/*`), rode no SQL Editor:
    ```sql
    update public.profiles set is_admin = true where email = 'voce@email.com';
    ```
 
-### 2. Stripe
+### 2. AbacatePay
 
-1. Crie um produto "Comizzo" com dois preços recorrentes: mensal e anual.
-2. Copie os IDs dos preços (`price_...`) pro `.env.local`
-   (`STRIPE_PRICE_MONTHLY` / `STRIPE_PRICE_YEARLY`).
-3. Copie a chave secreta (`sk_...`) pra `STRIPE_SECRET_KEY`.
-4. Configure um webhook apontando pra
-   `https://SEU_DOMINIO/api/webhooks/stripe`, escutando pelo menos:
-   `checkout.session.completed`, `customer.subscription.updated`,
-   `customer.subscription.deleted`. Copie o signing secret (`whsec_...`)
-   pra `STRIPE_WEBHOOK_SECRET`.
-5. Em desenvolvimento local, use `stripe listen --forward-to localhost:3000/api/webhooks/stripe`.
+1. Crie uma conta em [app.abacatepay.com](https://app.abacatepay.com).
+2. Em **Configurações > API**, copie a chave da API pra `ABACATEPAY_API_KEY`.
+3. Crie os dois produtos de assinatura (mensal e anual) no painel e copie o
+   **ID de cada produto** (`prod_...`, não o preço) pras variáveis
+   `ABACATEPAY_PRODUCT_MONTHLY` e `ABACATEPAY_PRODUCT_YEARLY`.
+4. Escolha um segredo (qualquer string aleatória) e configure a URL do
+   webhook como `https://SEU_DOMINIO/api/webhooks/abacatepay?webhookSecret=SEU_SEGREDO`,
+   escutando: `subscription.completed`, `subscription.renewed`,
+   `subscription.cancelled`. Cole o mesmo segredo em
+   `ABACATEPAY_WEBHOOK_SECRET`.
+   > A verificação de assinatura HMAC do AbacatePay (header
+   > `x-webhook-signature`) ainda não está implementada — confirme com a
+   > documentação deles antes de habilitar, e enquanto isso trate esse
+   > endpoint como confiando só no `webhookSecret` acima.
+5. Em desenvolvimento local, use ngrok ou similar pra expor `localhost:3000`
+   e configure a URL temporária no painel do AbacatePay.
+6. **Cancelamento**: hoje `/api/billing-portal` só marca a assinatura como
+   cancelada no banco do Comizzo — ele não chama a API do AbacatePay pra
+   cancelar a cobrança recorrente de verdade. Cancele também pelo painel do
+   AbacatePay (ou pelo canal de suporte deles) até isso ser automatizado.
 
 ### 3. OpenAI
 

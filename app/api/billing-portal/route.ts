@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { stripe } from "@/lib/stripe";
+import { createAdminClient } from "@/lib/supabase/server";
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -12,20 +12,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "não autenticado" }, { status: 401 });
   }
 
-  const { data: profile } = await supabase
+  const admin = createAdminClient();
+  const { error } = await admin
     .from("profiles")
-    .select("stripe_customer_id")
-    .eq("id", user.id)
-    .single();
+    .update({ subscription_status: "canceled" })
+    .eq("id", user.id);
 
-  if (!profile?.stripe_customer_id) {
-    return NextResponse.json({ error: "sem assinatura Stripe" }, { status: 400 });
+  if (error) {
+    return NextResponse.json({ error: "Não foi possível cancelar a assinatura." }, { status: 500 });
   }
 
-  const session = await stripe.billingPortal.sessions.create({
-    customer: profile.stripe_customer_id,
-    return_url: `${request.nextUrl.origin}/conta`,
-  });
-
-  return NextResponse.json({ url: session.url });
+  return NextResponse.json({ ok: true });
 }

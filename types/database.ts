@@ -26,8 +26,8 @@ export type ProfileRow = {
   id: string;
   email: string;
   is_admin: boolean;
-  stripe_customer_id: string | null;
-  stripe_subscription_id: string | null;
+  abacatepay_customer_id: string | null;
+  abacatepay_subscription_id: string | null;
   subscription_status: SubscriptionStatus;
   subscription_plan: SubscriptionPlan | null;
   current_period_end: string | null;
